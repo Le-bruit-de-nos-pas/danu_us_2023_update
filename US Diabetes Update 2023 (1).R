@@ -9770,3 +9770,53 @@ GLP1 %>% ungroup() %>% distinct() %>%
 
 
 # -----------
+
+                                          # Generate drug classes used obesity patients ---------
+OBE2_Drug_Histories <- fread("OBE2 Analysis Results 1.1/OBE2 Drug Histories.txt")
+DIA_Drug_Histories <- fread("DIA Analysis Results 1.1/DIA Drug Histories.txt")
+Drug_Histories <- DIA_Drug_Histories %>% bind_rows(OBE2_Drug_Histories)
+Drug_Histories <- gather(Drug_Histories, Month, Drugs, month1:month60, factor_key=TRUE)
+Drug_Histories <- Drug_Histories %>% select(-c(disease, weight))
+
+DANU_Demographics <- fread("DANU Demographics 1.1/DANU Demographics.txt")
+DANU_Demographics <- DANU_Demographics %>% filter(grepl("Obesity", diagnosis)) %>% 
+  select(patid) %>% rename("patient"="patid")
+
+Drug_Histories <- DANU_Demographics %>% inner_join(Drug_Histories)
+
+Drug_Histories <- Drug_Histories %>% filter(Drugs!="-") %>% select(-Month) %>% distinct()
+
+length(unique(Drug_Histories$patient)) # 274663
+
+Drug_Histories <- separate_rows(Drug_Histories, Drugs, sep = ",", convert=T)
+
+DANU_Ingredients <- fread("DIA Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+DANU_Ingredients <- DANU_Ingredients %>% select(molecule, drug_class)
+
+Drug_Histories <- Drug_Histories %>% mutate(Drugs=as.character(Drugs)) %>% left_join(DANU_Ingredients, by=c("Drugs"="molecule"))
+
+Drug_Histories <- Drug_Histories %>% select(-Drugs)
+
+Drug_Histories <- Drug_Histories %>% distinct()
+
+DANU_Drug_Utilizations_Full <- fread("DANU Utilizations 7.0/DANU Drug Utilizations Full.txt")
+
+DANU_Drug_Utilizations_Full <- DANU_Drug_Utilizations_Full %>% select(patid, drug_ahfs_class) %>% distinct()
+length(unique(DANU_Drug_Utilizations_Full$drug_ahfs_class))
+names(DANU_Drug_Utilizations_Full)[1] <- "patient"
+
+Drug_Histories <- DANU_Drug_Utilizations_Full %>% rename("drug_class"="drug_ahfs_class") %>%
+  bind_rows(Drug_Histories)
+
+Drug_Histories <- Drug_Histories %>% mutate(exp=1) %>% spread(key=drug_class, value=exp)
+Drug_Histories[is.na(Drug_Histories)] <- 0
+
+names(Drug_Histories) <- str_replace_all(names(Drug_Histories), " ", "_")
+names(Drug_Histories) <- str_replace_all(names(Drug_Histories), "-", "_")
+names(Drug_Histories) <- str_replace_all(names(Drug_Histories), ",", "_")
+names(Drug_Histories) <- str_replace_all(names(Drug_Histories), "&", "_")
+
+fwrite(Drug_Histories, "OBE_Classes_Histories.txt")
+
+# ------
