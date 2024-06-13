@@ -9820,3 +9820,196 @@ names(Drug_Histories) <- str_replace_all(names(Drug_Histories), "&", "_")
 fwrite(Drug_Histories, "OBE_Classes_Histories.txt")
 
 # ------
+
+# Concomitant Drugs With Insulin month60 and All Months --------
+
+DANU_Ingredients <- fread("DIA Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+DANU_Ingredients <- DANU_Ingredients %>% select(molecule, drug_group)
+DANU_Ingredients$molecule <- as.numeric(DANU_Ingredients$molecule)
+
+string_Biguanide       <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Biguanide"], collapse = "|"),")\\b")
+string_Antidiabetic    <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Antidiabetic"], collapse = "|"),")\\b")
+string_DPP4            <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "DPP4"], collapse = "|"),")\\b")
+string_SGLT2           <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "SGLT2"], collapse = "|"),")\\b")
+string_Insulin         <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Insulin"], collapse = "|"),")\\b")
+string_OralGLP1        <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "GLP1 Oral"], collapse = "|"),")\\b")
+string_InjectableGLP1  <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "GLP1 Injectable"], collapse = "|"),")\\b")
+
+
+DIA_Drug_Histories <- fread("DIA Analysis Results 1.1/DIA Drug Histories.txt", integer64 = "character", stringsAsFactors = F)
+Treatment_exp_Vector <- fread("DIA Analysis Results 1.1/Treatment_exp_Vector.txt")
+DIA_Drug_Histories <- Treatment_exp_Vector %>% left_join(DIA_Drug_Histories)
+DIA_Drug_Histories <- gather(DIA_Drug_Histories, Month, Drugs, month1:month60, factor_key=TRUE)
+DIA_Drug_Histories$Month <- parse_number(as.character(DIA_Drug_Histories$Month))
+DIA_Drug_Histories <- DIA_Drug_Histories %>% select(patient, weight, Month, Drugs) %>% distinct() %>% filter(Drugs!="-")
+
+temp <- DIA_Drug_Histories # %>% filter(Month==60)
+temp <- temp %>% filter(grepl(string_Insulin, Drugs)) %>% select(patient, weight, Month) %>% distinct() %>% #   summarise(n=sum(weight))  # 261003759
+  left_join(DIA_Drug_Histories)
+temp <- separate_rows(temp, Drugs, sep = ",", convert=T)
+temp <- temp %>% left_join(DANU_Ingredients, by=c("Drugs"="molecule")) %>% 
+  select(patient, weight, Month, drug_group) %>% distinct()
+
+temp <- temp %>% mutate(exp=1) %>% spread(key=drug_group, value=exp)
+temp[is.na(temp)] <- 0
+
+temp %>% mutate(mono_combo=ifelse(SGLT2==0&`GLP1 Injectable`==0&`GLP1 Oral`==0&DPP4==0&Biguanide==0&Antidiabetic==0, "Insulin_Only", "Combo")) %>%
+  group_by(mono_combo) %>% summarise(n=sum(weight))
+
+temp %>% group_by(`GLP1 Injectable`) %>% summarise(n=sum(weight))
+temp %>% group_by(`GLP1 Oral`) %>% summarise(n=sum(weight))
+temp %>% group_by(SGLT2) %>% summarise(n=sum(weight))
+temp %>% group_by(DPP4) %>% summarise(n=sum(weight))
+temp %>% group_by(Antidiabetic) %>% summarise(n=sum(weight))
+temp %>% group_by(Biguanide) %>% summarise(n=sum(weight))
+
+# ---------------------
+
+# Insulin Stops % Continuous vs Stopped, % Went Back, % Did not go back ------------
+
+DANU_Ingredients <- fread("DIA Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+DANU_Ingredients <- DANU_Ingredients %>% select(molecule, drug_group)
+DANU_Ingredients$molecule <- as.numeric(DANU_Ingredients$molecule)
+
+string_Biguanide       <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Biguanide"], collapse = "|"),")\\b")
+string_Antidiabetic    <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Antidiabetic"], collapse = "|"),")\\b")
+string_DPP4            <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "DPP4"], collapse = "|"),")\\b")
+string_SGLT2           <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "SGLT2"], collapse = "|"),")\\b")
+string_Insulin         <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Insulin"], collapse = "|"),")\\b")
+string_OralGLP1        <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "GLP1 Oral"], collapse = "|"),")\\b")
+string_InjectableGLP1  <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "GLP1 Injectable"], collapse = "|"),")\\b")
+
+
+DIA_Drug_Histories <- fread("DIA Analysis Results 1.1/DIA Drug Histories.txt", integer64 = "character", stringsAsFactors = F)
+Treatment_exp_Vector <- fread("DIA Analysis Results 1.1/Treatment_exp_Vector.txt")
+DIA_Drug_Histories <- Treatment_exp_Vector %>% left_join(DIA_Drug_Histories)
+DIA_Drug_Histories <- gather(DIA_Drug_Histories, Month, Drugs, month1:month60, factor_key=TRUE)
+DIA_Drug_Histories$Month <- parse_number(as.character(DIA_Drug_Histories$Month))
+DIA_Drug_Histories <- DIA_Drug_Histories %>% select(patient, weight, Month, Drugs) %>% distinct() 
+
+Start_bef_36 <- DIA_Drug_Histories %>% filter(Month<=36) %>% filter(grepl(string_Insulin, Drugs)) %>% select(patient, weight) %>% distinct()
+sum(Start_bef_36$weight) # 8725947
+
+Start_bef_36 <- Start_bef_36 %>% left_join(DIA_Drug_Histories) %>% filter(grepl(string_Insulin, Drugs)) %>% group_by(patient, weight) %>%
+  filter(Month==min(Month)) %>% select(patient, weight, Month) %>% distinct() %>% rename("First_Insulin"="Month") %>% ungroup()
+sum(Start_bef_36$weight) # 8725947
+
+temp <- Start_bef_36 %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Insulin)
+Stopped <- temp %>% filter(!grepl(string_Insulin, Drugs)) %>% group_by(patient) %>% filter(Month==min(Month)) %>%
+  select(patient, weight, Month) %>% distinct() %>% rename("First_Stop"="Month")
+
+sum(Stopped$weight) # 7391506
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% filter(grepl(string_Insulin, Drugs)) %>%
+  select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # return 5034572
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% 
+  filter(grepl(string_Insulin, Drugs)) %>% select(patient) %>% distinct() %>%
+  inner_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop)) %>%
+  filter(grepl(string_InjectableGLP1, Drugs)) %>% select(patient, weight) %>% distinct() %>%
+  ungroup() %>% summarise(n=sum(weight))
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% 
+  filter(grepl(string_Insulin, Drugs)) %>% select(patient) %>% distinct() %>%
+  inner_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop)) %>%
+  filter(grepl(string_OralGLP1, Drugs)) %>% select(patient, weight) %>% distinct() %>%
+  ungroup() %>% summarise(n=sum(weight))
+
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>%
+  anti_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% 
+  filter(grepl(string_Insulin, Drugs)) %>% select(patient) %>% distinct()) %>%
+  filter(grepl(string_InjectableGLP1, Drugs)) %>% select(patient, weight) %>% distinct() %>%
+  ungroup() %>% summarise(n=sum(weight))
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>%
+  anti_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% 
+  filter(grepl(string_Insulin, Drugs)) %>% select(patient) %>% distinct()) %>%
+  filter(grepl(string_OralGLP1, Drugs)) %>% select(patient, weight) %>% distinct() %>%
+  ungroup() %>% summarise(n=sum(weight))
+
+
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% filter(grepl(string_InjectableGLP1, Drugs)) %>%
+  select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # 1997577
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% filter(grepl(string_InjectableGLP1, Drugs)) %>%
+  select(patient, weight) %>%
+  inner_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% filter(grepl(string_Insulin, Drugs)) %>%
+  select(patient, weight)) %>%
+  select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # 1626154
+  
+
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>%
+  anti_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% filter(grepl(string_InjectableGLP1, Drugs)) %>% select(patient)) %>%
+  select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # 5364869
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>%
+  anti_join(Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>% filter(grepl(string_InjectableGLP1, Drugs)) %>% select(patient)) %>% 
+  filter(grepl(string_Insulin, Drugs)) %>%
+  select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # 3408418
+  
+
+
+Stopped %>% left_join(DIA_Drug_Histories) %>% filter(Month>First_Stop) %>%
+  mutate(Insulin=ifelse(grepl(string_Insulin, Drugs), 1,0)) %>%
+  mutate(Injectable=ifelse(grepl(string_InjectableGLP1, Drugs), 1,0)) %>% 
+  group_by(Injectable, Insulin) %>% summarise(n=sum(weight))
+
+
+Insulin_m48 <- DIA_Drug_Histories %>% filter(Month==48 & grepl(string_Insulin, Drugs)) %>% select(patient, weight) 
+sum(Insulin_m48$weight) # 4783565
+Insulin_m48 <- Insulin_m48 %>% left_join(DIA_Drug_Histories) %>% filter(Month>=48)
+
+Insulin_m48 <- Insulin_m48 %>% group_by(patient) %>% mutate(flow=ifelse(Drugs!=lag(Drugs),1,0)) %>% 
+  mutate(flow=ifelse(is.na(flow),0,flow))
+
+Insulin_m48 %>% filter(flow==1) %>% select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # 3829652
+
+Insulin_m48 <- Insulin_m48 %>% inner_join(Insulin_m48 %>% filter(flow==1) %>% select(patient, weight) %>% distinct())
+
+Insulin_m48 <- Insulin_m48 %>% mutate(ON_Insulin=ifelse(grepl(string_Insulin,Drugs), 1,0))
+
+Insulin_m48 %>% filter(ON_Insulin==0) %>% select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight))
+
+Insulin_m48 %>% 
+  inner_join(
+    Insulin_m48 %>% filter(ON_Insulin==0)  %>% group_by(patient) %>% filter(Month==min(Month)) %>% rename("First_Stop"="Month") %>%
+  select(patient, First_Stop)
+) %>% filter(Month>First_Stop) %>% filter(ON_Insulin==1) %>% select(patient, weight) %>% distinct() %>%
+  ungroup() %>% summarise(n=sum(weight))
+
+Insulin_m48 <- Insulin_m48 %>% anti_join(Insulin_m48 %>% filter(ON_Insulin==0) %>% select(patient, weight) %>% distinct() %>% ungroup() )
+
+Insulin_m48 %>% select(patient, weight) %>% distinct() %>%  ungroup() %>% summarise(n=sum(weight)) # remained on insulin
+# 1925134
+
+
+Insulin_m48 <- separate_rows(Insulin_m48, Drugs, sep = ",", convert=T)
+
+Insulin_m48 <- Insulin_m48 %>% filter(grepl(string_Insulin, Drugs))
+
+Insulin_m48 <- Insulin_m48 %>% arrange(patient, weight, Month, Drugs) %>% group_by(patient, weight, Month) %>%
+  mutate(Drugs=paste0(Drugs, collapse = ",")) %>% distinct()
+
+Insulin_m48 <- Insulin_m48 %>% select(-ON_Insulin)
+
+Insulin_m48 %>% ungroup() %>% group_by(patient) %>% mutate(flow_2=ifelse(Drugs!=lag(Drugs),1,0)) %>%
+  mutate(flow_2=ifelse(is.na(flow_2), 0, flow_2)) %>% filter(flow_2==1) %>%
+  select(patient, weight) %>% distinct() %>% ungroup() %>% summarise(n=sum(weight)) # 1334896
+
+
+Changed_Insulin <- Insulin_m48 %>% ungroup() %>% group_by(patient) %>% mutate(flow_2=ifelse(Drugs!=lag(Drugs),1,0)) %>%
+  mutate(flow_2=ifelse(is.na(flow_2), 0, flow_2)) %>% filter(flow_2==1) %>%
+  select(patient, weight) %>% distinct() %>% ungroup()
+
+Changed_Others <- Insulin_m48 %>% ungroup() %>% group_by(patient) %>% mutate(flow_2=ifelse(Drugs!=lag(Drugs),1,0)) %>%
+  mutate(flow_2=ifelse(is.na(flow_2), 0, flow_2)) %>% filter(flow_2==1) %>%
+  select(patient, weight) %>% distinct() %>% ungroup()
+
+Changed_Insulin %>% inner_join(Changed_Others) %>% summarise(n=sum(weight))
+
+# ------------
