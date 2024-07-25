@@ -9625,3 +9625,212 @@ DIA_Flows_Aux_Long %>% filter(grepl("I", s1) & !grepl("I", s2)) %>%
 # 7 x     0.570  
 
 # -----
+
+# Stocks and Flows Diagram % Insulin Exprienced Up to that point ---------
+DIA_Flows_Aux_Long <- fread("DIA Analysis Results 1.1/DIA_Flows_Aux_Long.txt", integer64 = "character", stringsAsFactors = F)
+Treatment_exp_Vector <- fread("DIA Analysis Results 1.1/Treatment_exp_Vector.txt")
+DIA_Flows_Aux_Long <- Treatment_exp_Vector %>% inner_join(DIA_Flows_Aux_Long)
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% mutate(p1=as.numeric(p1)) %>% mutate(p2=as.numeric(p2)) 
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% select(patient, weight, p1, p2, d1, d2, s1, s2, flow)
+
+DANU_Ingredients <- fread("DIA Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+string_Insulin         <- paste0("\\b(",paste0(DANU_Ingredients$molecule[DANU_Ingredients$drug_group == "Insulin"], collapse = "|"),")\\b")
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s2=ifelse(s2=="d", "b", s2)) %>%
+  mutate(s2=ifelse(s2=="S", "D", s2)) %>%
+  mutate(s2=ifelse(s2=="g", "G", s2)) 
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s1=ifelse(s1=="d", "b", s1)) %>%
+  mutate(s1=ifelse(s1=="S", "D", s1)) %>%
+  mutate(s1=ifelse(s1=="g", "G", s1)) 
+
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% arrange(patient, p1) %>% group_by(patient) %>%
+  mutate(Insulin=ifelse(grepl(string_Insulin, d1), 1,0)) %>%
+  mutate(Insulin=cumsum(Insulin)) %>%
+  mutate(Insulin=ifelse(Insulin==0,0,1)) %>% ungroup()
+
+
+DIA_Flows_Aux_Long %>%
+  filter(p2==60) %>% group_by(s2, Insulin) %>% summarise(n=sum(weight)) %>%
+  spread(key=Insulin, value=n) %>% mutate(perc=`1`/(`1`+`0`))
+
+data.frame(DIA_Flows_Aux_Long %>%
+  filter(flow==1) %>%
+   group_by(s1, s2, Insulin) %>% summarise(n=sum(weight)) %>%
+  spread(key=Insulin, value=n) %>% mutate(`0`=ifelse(is.na(`0`), 0, `0`)) %>%  mutate(perc=`1`/(`1`+`0`))) %>%
+  select(s1, s2, perc ) %>% mutate(perc=round(100*perc))
+
+# ----------
+
+# Stocks and Flows Diagram % Obesity  ---------
+DIA_Flows_Aux_Long <- fread("DIA Analysis Results 1.1/DIA_Flows_Aux_Long.txt", integer64 = "character", stringsAsFactors = F)
+Treatment_exp_Vector <- fread("DIA Analysis Results 1.1/Treatment_exp_Vector.txt")
+DIA_Flows_Aux_Long <- Treatment_exp_Vector %>% inner_join(DIA_Flows_Aux_Long)
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% mutate(p1=as.numeric(p1)) %>% mutate(p2=as.numeric(p2)) 
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% select(patient, weight, p1, p2, d1, d2, s1, s2, flow)
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s2=ifelse(s2=="d", "b", s2)) %>%
+  mutate(s2=ifelse(s2=="S", "D", s2)) %>%
+  mutate(s2=ifelse(s2=="g", "G", s2)) 
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s1=ifelse(s1=="d", "b", s1)) %>%
+  mutate(s1=ifelse(s1=="S", "D", s1)) %>%
+  mutate(s1=ifelse(s1=="g", "G", s1)) 
+
+DANU_Demographics <- fread("DANU Demographics 1.1/DANU Demographics.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Demographics <- DANU_Demographics %>% select(patid, diagnosis)
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% left_join(DANU_Demographics, by=c("patient"="patid"))
+
+
+DIA_Flows_Aux_Long %>%
+  filter(p2==60) %>% group_by(s2, diagnosis) %>% summarise(n=sum(weight)) %>%
+  spread(key=diagnosis, value=n) %>% mutate(perc=`Diabetes + Obesity`/(`Diabetes + Obesity`+`Diabetes`))
+
+data.frame(DIA_Flows_Aux_Long %>%
+  filter(flow==1) %>%
+   group_by(s1, s2, diagnosis) %>% summarise(n=sum(weight)) %>%
+  spread(key=diagnosis, value=n) %>%  mutate(perc=`Diabetes + Obesity`/(`Diabetes + Obesity`+`Diabetes`))) %>%
+  select(s1, s2, perc ) %>% mutate(perc=round(100*perc))
+
+# ----------
+
+# Stocks and Flows Diagram % Heart Failure  ---------
+DIA_Flows_Aux_Long <- fread("DIA Analysis Results 1.1/DIA_Flows_Aux_Long.txt", integer64 = "character", stringsAsFactors = F)
+Treatment_exp_Vector <- fread("DIA Analysis Results 1.1/Treatment_exp_Vector.txt")
+DIA_Flows_Aux_Long <- Treatment_exp_Vector %>% inner_join(DIA_Flows_Aux_Long)
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% mutate(p1=as.numeric(p1)) %>% mutate(p2=as.numeric(p2)) 
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% select(patient, weight, p1, p2, d1, d2, s1, s2, flow)
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s2=ifelse(s2=="d", "b", s2)) %>%
+  mutate(s2=ifelse(s2=="S", "D", s2)) %>%
+  mutate(s2=ifelse(s2=="g", "G", s2)) 
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s1=ifelse(s1=="d", "b", s1)) %>%
+  mutate(s1=ifelse(s1=="S", "D", s1)) %>%
+  mutate(s1=ifelse(s1=="g", "G", s1)) 
+
+DANU_Demographics <- fread("DANU Demographics 1.1/DANU Demographics.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Demographics <- DANU_Demographics %>% select(patid, heart_failure_condition) %>% mutate(heart_failure_condition=ifelse(heart_failure_condition=="-", 0, 1))
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% left_join(DANU_Demographics, by=c("patient"="patid"))
+
+
+DIA_Flows_Aux_Long %>%
+  filter(p2==60) %>% group_by(s2, heart_failure_condition) %>% summarise(n=sum(weight)) %>%
+  spread(key=heart_failure_condition, value=n) %>% mutate(perc=`1`/(`1`+`0`))
+
+
+data.frame(DIA_Flows_Aux_Long %>%
+  filter(flow==1) %>%
+   group_by(s1, s2, heart_failure_condition) %>% summarise(n=sum(weight)) %>%
+  spread(key=heart_failure_condition, value=n) %>%  mutate(perc=`1`/(`1`+`0`))) %>%
+  select(s1, s2, perc ) %>% mutate(perc=round(100*perc))
+
+# ----------
+
+
+# Stocks and Flows Diagram % Heart Failure  ---------
+DIA_Flows_Aux_Long <- fread("DIA Analysis Results 1.1/DIA_Flows_Aux_Long.txt", integer64 = "character", stringsAsFactors = F)
+Treatment_exp_Vector <- fread("DIA Analysis Results 1.1/Treatment_exp_Vector.txt")
+DIA_Flows_Aux_Long <- Treatment_exp_Vector %>% inner_join(DIA_Flows_Aux_Long)
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% mutate(p1=as.numeric(p1)) %>% mutate(p2=as.numeric(p2)) 
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% select(patient, weight, p1, p2, d1, d2, s1, s2, flow)
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s2=ifelse(s2=="d", "b", s2)) %>%
+  mutate(s2=ifelse(s2=="S", "D", s2)) %>%
+  mutate(s2=ifelse(s2=="g", "G", s2)) 
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% 
+  mutate(s1=ifelse(s1=="d", "b", s1)) %>%
+  mutate(s1=ifelse(s1=="S", "D", s1)) %>%
+  mutate(s1=ifelse(s1=="g", "G", s1)) 
+
+DANU_Demographics <- fread("DANU Demographics 1.1/DANU Demographics.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Demographics <- DANU_Demographics %>% select(patid, kidney_condition ) %>% mutate(kidney_condition =ifelse(kidney_condition=="-", 0, 1))
+
+DIA_Flows_Aux_Long <- DIA_Flows_Aux_Long %>% left_join(DANU_Demographics, by=c("patient"="patid"))
+
+
+DIA_Flows_Aux_Long %>%
+  filter(p2==60) %>% group_by(s2, kidney_condition) %>% summarise(n=sum(weight)) %>%
+  spread(key=kidney_condition, value=n) %>% mutate(perc=`1`/(`1`+`0`))
+
+
+data.frame(DIA_Flows_Aux_Long %>%
+  filter(flow==1) %>%
+   group_by(s1, s2, kidney_condition) %>% summarise(n=sum(weight)) %>%
+  spread(key=kidney_condition, value=n) %>%  mutate(perc=`1`/(`1`+`0`))) %>%
+  select(s1, s2, perc ) %>% mutate(perc=round(100*perc))
+
+# ----------
+
+# Stocks and Flows Novo Nordisk version -------
+Drug_Formulary_vNovo <- fread("DIA Alternative Tables - Novo Nordisk/DIA Alternative Tables/Drug_Formulary_vNovo.txt", colClasses = "character")
+
+string_Biguanide       <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "Biguanide"], collapse = "|"),")\\b")
+string_Antidiabetic    <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "Antidiabetic"], collapse = "|"),")\\b")
+string_DPP4            <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "DPP4"], collapse = "|"),")\\b")
+string_SGLT2           <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "SGLT2"], collapse = "|"),")\\b")
+string_Insulin         <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "Insulin"&Drug_Formulary_vNovo$manufacturer=="Other"], collapse = "|"),")\\b")
+string_Insulin_Novo         <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "Insulin"&Drug_Formulary_vNovo$manufacturer=="Novo Nordisk"], collapse = "|"),")\\b")
+string_OralGLP1        <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "GLP1 Oral"&Drug_Formulary_vNovo$manufacturer=="Other"], collapse = "|"),")\\b")
+string_OralGLP1_Novo        <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "GLP1 Oral"&Drug_Formulary_vNovo$manufacturer=="Novo Nordisk"], collapse = "|"),")\\b")
+string_InjectableGLP1  <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "GLP1 Injectable"&Drug_Formulary_vNovo$manufacturer=="Other"], collapse = "|"),")\\b")
+string_InjectableGLP1_Novo  <- paste0("\\b(",paste0(Drug_Formulary_vNovo$drug_id_2[Drug_Formulary_vNovo$drug_group == "GLP1 Injectable"&Drug_Formulary_vNovo$manufacturer=="Novo Nordisk"], collapse = "|"),")\\b")
+
+DIA_Drug_Histories_Alternative_Full <- fread("DIA Alternative Tables - Novo Nordisk/DIA Alternative Tables/DIA_Drug_Histories_Alternative_Full.txt", colClasses = "character")
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- fread("DIA Alternative Tables - Novo Nordisk/DIA Alternative Tables/DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled.txt", colClasses = "character")
+sum(as.numeric(DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled$weight))
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- gather(DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled, Month, Drugs, month1:month60, factor_key=TRUE)
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% select(-disease)
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled$Month <- as.character(DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled$Month)
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled$Month <- parse_number(DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled$Month)
+
+Treat_exp <- DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% filter(Drugs!="-") %>% select(patient) %>% distinct()
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- Treat_exp %>% left_join(DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled)
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% mutate(Stock=ifelse(grepl(string_OralGLP1_Novo, Drugs), "g_N",
+                                                                            ifelse(grepl(string_OralGLP1, Drugs), "g",
+                                                                                         ifelse(grepl(string_InjectableGLP1_Novo, Drugs), "G_N",
+                                                                                                ifelse(grepl(string_InjectableGLP1, Drugs), "G",
+                                                                                                       ifelse(grepl(string_Insulin_Novo, Drugs), "I_N",
+                                                                                                              ifelse(grepl(string_Insulin, Drugs), "I",
+                                                                                                                     ifelse(grepl(string_SGLT2, Drugs), "S",
+                                                                                                                            ifelse(grepl(string_DPP4, Drugs), "D",
+                                                                                                                                   ifelse(grepl(string_Antidiabetic, Drugs), "d",
+                                                                                                                                          ifelse(grepl(string_Biguanide, Drugs), "b", NA)))))))))))
+
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>%
+  filter(Month==60) %>% group_by(Stock) %>% summarise(n=sum(as.numeric(weight)))
+
+
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>%
+  left_join(
+    DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% select(patient, Month, Drugs, Stock) %>%
+      mutate(Month=Month-1) %>% rename("Drugs_2"="Drugs") %>% rename("Stock_2"="Stock")
+  )
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% filter(Month!=60) %>%
+  mutate(Stock=ifelse(is.na(Stock), "x", Stock)) %>%
+  mutate(Stock_2=ifelse(is.na(Stock_2), "x", Stock_2)) 
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled <- DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% mutate(flow=ifelse(Drugs_2!=Drugs, 1,0))
+
+DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% filter(flow==1) %>% filter(Month>=48) %>%
+  group_by(Stock, Stock_2) %>% summarise(n=sum(as.numeric(weight))) %>%
+  spread(key=Stock_2, value=n)
+
+# ------
