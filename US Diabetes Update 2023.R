@@ -9834,3 +9834,114 @@ DIA_Drug_Histories_Alternative_ExclIrrelvIns_Filled %>% filter(flow==1) %>% filt
   spread(key=Stock_2, value=n)
 
 # ------
+
+# DANU OBE2 GLP1 persistency and patient behavior ------
+DANU_Ingredients <- fread("OBE2 Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+DANU_Ingredients <- DANU_Ingredients %>% select(molecule, drug_group)
+names(DANU_Ingredients)[1] <- "Drugs"
+DANU_Ingredients$Drugs <- as.numeric(DANU_Ingredients$Drugs)
+
+string_GLP1 <- paste0("\\b(",paste0(DANU_Ingredients$Drugs[DANU_Ingredients$drug_group == "GLP1 Oral"|DANU_Ingredients$drug_group == "GLP1 Injectable"], collapse = "|"),")\\b")
+
+OBE2_Drug_Histories <- fread("OBE2 Analysis Results 1.1/OBE2 Drug Histories.txt")
+OBE2_Drug_Histories <- gather(OBE2_Drug_Histories, Month, Drugs, month1:month60, factor_key=TRUE)
+OBE2_Drug_Histories <- OBE2_Drug_Histories %>%  mutate(Month=parse_number(as.character(Month)))
+OBE2_Drug_Histories <- OBE2_Drug_Histories %>% mutate(ON=ifelse(grepl(string_GLP1, Drugs),1,0))
+
+OBE2_Drug_Histories <- OBE2_Drug_Histories <- OBE2_Drug_Histories %>% arrange(patient, Month) %>% select(-c(disease, Drugs)) %>% group_by(patient) 
+
+data.frame(OBE2_Drug_Histories %>% filter(ON==1) %>% ungroup() %>% group_by(Month) %>% summarise(tot=sum(weight)))
+
+OBE2_Drug_Histories <- OBE2_Drug_Histories %>% group_by(patient, weight) %>% 
+  mutate(grp = rle(ON)$lengths %>% {rep(seq(length(.)), .)})
+
+data.frame(OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<=36) %>%
+  select(patient, weight) %>% distinct() %>%
+  left_join(OBE2_Drug_Histories) %>% group_by(patient) %>%
+  filter(ON==1 & grp==min(grp)) %>% ungroup() %>%
+  group_by(patient, weight) %>% count() %>% ungroup() %>%
+  group_by(n) %>% summarise(pop=sum(weight)))
+
+
+to_track <- OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month>=49) %>%
+  select(patient, weight, Month) %>% rename("Month2"="Month") %>%
+  inner_join(OBE2_Drug_Histories %>% ungroup() %>% filter(ON==0 & Month>=49) %>%
+  select(patient, weight, Month) %>% rename("Month1"="Month") ) %>%
+  filter(Month2>Month1) %>% select(patient, weight) %>% distinct()
+
+sum(to_track$weight) # 387701
+
+OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<49) %>%
+  select(patient) %>% distinct() %>% inner_join(to_track) %>%
+  summarise(n=sum(weight))
+
+Starts_m36 <- OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<=36) %>%
+   group_by(patient) %>% filter(Month==min(Month)) %>%
+   select(patient, weight, Month) %>% rename("Started"="Month") %>% ungroup()
+
+sum(Starts_m36$weight)
+
+Starts_m36 %>% inner_join(OBE2_Drug_Histories) %>%
+  filter(Month>Started) %>%
+  # filter(ON==0) %>% select(patient, weight) %>% distinct() %>% summarise(n=sum(weight)) 150359 stopped, 3992 never stop
+
+  
+  
+Starts_m36 %>% inner_join(OBE2_Drug_Histories) %>%
+  filter(Month>Started) %>%
+  filter(ON==0) %>% select(patient, weight, Month) %>% distinct() %>% rename("stop"="Month") %>%
+  inner_join(
+    Starts_m36 %>% inner_join(OBE2_Drug_Histories) %>% filter(Month>Started) %>% 
+      filter(ON==1) %>% select(patient, weight, Month) %>% distinct()  %>% rename("start"="Month")
+    ) %>% filter(start>stop) %>%  select(patient, weight) %>% distinct()  %>% summarise(n=sum(weight))
+
+ignore <- OBE2_Drug_Histories %>% filter(ON==1) %>% select(patient, weight, grp) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% filter(n>1) %>% select(-n) %>%
+  left_join(OBE2_Drug_Histories)  %>% filter(ON==1) %>% select(patient, weight, grp) %>% distinct() %>%
+  group_by(patient, weight) %>% filter(grp==min(grp)|grp==min(grp)+2) %>%
+  left_join(OBE2_Drug_Histories) 
+
+lapsed <- ignore  %>% select(patient, weight, grp) %>% distinct() %>%
+  filter(grp==min(grp)) %>% mutate(grp=grp+1) %>%
+  select(patient, weight, grp) %>% distinct() %>%
+  left_join(OBE2_Drug_Histories) %>% group_by(patient, weight) %>% count() %>% rename("lapsed"="n")
+  
+  
+ignore <- ignore %>% group_by(patient, weight) %>% 
+  mutate(grp=ifelse(grp==min(grp),1,2)) %>%
+  group_by(patient, weight, grp) %>% count() %>% ungroup() %>%
+  spread(key=grp, value=n) %>%
+  inner_join(lapsed)
+
+
+mean(ignore$`1`)
+mean(ignore$`2`)
+mean(ignore$`lapsed`)
+
+
+AllOBE2_episodes <- OBE2_Drug_Histories %>% filter(ON==1 & Month<49) %>% select(patient, weight, grp) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% rename("Nr_episodes"="n") %>%
+  left_join(
+    OBE2_Drug_Histories %>% filter(ON==1  & Month<49) %>% select(patient, weight, Month) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% rename("Total_months_ON"="n")
+  ) 
+
+
+fwrite(AllOBE2_episodes, "AllOBE2_episodes_v2.csv")
+
+
+
+
+OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<49) %>%
+  group_by(patient,weight) %>% count() %>% rename("before"="n") %>%
+  left_join(OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1) %>% group_by(patient,weight) %>% count()) %>%
+  mutate(before=ifelse(before<6, "short",
+                       ifelse(before<12,"medium", "long"))) %>%
+  mutate(n=ifelse(n<6,"short",
+                  ifelse(n<12,"medium", "long"))) %>%
+  group_by(before, n) %>% summarise(pop=sum(weight))
+
+
+
+# --------------
