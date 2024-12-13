@@ -9945,3 +9945,427 @@ OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<49) %>%
 
 
 # --------------
+# DANU OBE2 GLP1 persistency by BMI group and N comorbidities ------
+DANU_Ingredients <- fread("OBE2 Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+DANU_Ingredients <- DANU_Ingredients %>% select(molecule, drug_group)
+names(DANU_Ingredients)[1] <- "Drugs"
+DANU_Ingredients$Drugs <- as.numeric(DANU_Ingredients$Drugs)
+
+string_GLP1 <- paste0("\\b(",paste0(DANU_Ingredients$Drugs[DANU_Ingredients$drug_group == "GLP1 Oral"|DANU_Ingredients$drug_group == "GLP1 Injectable"], collapse = "|"),")\\b")
+
+OBE2_Drug_Histories <- fread("OBE2 Analysis Results 1.1/OBE2 Drug Histories.txt")
+OBE2_Drug_Histories <- gather(OBE2_Drug_Histories, Month, Drugs, month1:month60, factor_key=TRUE)
+OBE2_Drug_Histories <- OBE2_Drug_Histories %>%  mutate(Month=parse_number(as.character(Month)))
+OBE2_Drug_Histories <- OBE2_Drug_Histories %>% mutate(ON=ifelse(grepl(string_GLP1, Drugs),1,0))
+
+OBE2_Drug_Histories <- OBE2_Drug_Histories <- OBE2_Drug_Histories %>% arrange(patient, Month) %>% select(-c(disease, Drugs)) %>% group_by(patient) 
+
+data.frame(OBE2_Drug_Histories %>% filter(ON==1) %>% ungroup() %>% group_by(Month) %>% summarise(tot=sum(weight)))
+
+OBE2_Drug_Histories <- OBE2_Drug_Histories %>% group_by(patient, weight) %>% 
+  mutate(grp = rle(ON)$lengths %>% {rep(seq(length(.)), .)})
+
+data.frame(OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<=36) %>%
+  select(patient, weight) %>% distinct() %>%
+  left_join(OBE2_Drug_Histories) %>% group_by(patient) %>%
+  filter(ON==1 & grp==min(grp)) %>% ungroup() %>%
+  group_by(patient, weight) %>% count() %>% ungroup() %>%
+  group_by(n) %>% summarise(pop=sum(weight)))
+
+
+to_track <- OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month>=49) %>%
+  select(patient, weight, Month) %>% rename("Month2"="Month") %>%
+  inner_join(OBE2_Drug_Histories %>% ungroup() %>% filter(ON==0 & Month>=49) %>%
+  select(patient, weight, Month) %>% rename("Month1"="Month") ) %>%
+  filter(Month2>Month1) %>% select(patient, weight) %>% distinct()
+
+sum(to_track$weight) # 387701
+
+OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<49) %>%
+  select(patient) %>% distinct() %>% inner_join(to_track) %>%
+  summarise(n=sum(weight))
+
+Starts_m36 <- OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<=36) %>%
+   group_by(patient) %>% filter(Month==min(Month)) %>%
+   select(patient, weight, Month) %>% rename("Started"="Month") %>% ungroup()
+
+sum(Starts_m36$weight)
+
+Starts_m36 %>% inner_join(OBE2_Drug_Histories) %>%
+  filter(Month>Started) %>%
+  # filter(ON==0) %>% select(patient, weight) %>% distinct() %>% summarise(n=sum(weight)) 150359 stopped, 3992 never stop
+
+  
+  
+Starts_m36 %>% inner_join(OBE2_Drug_Histories) %>%
+  filter(Month>Started) %>%
+  filter(ON==0) %>% select(patient, weight, Month) %>% distinct() %>% rename("stop"="Month") %>%
+  inner_join(
+    Starts_m36 %>% inner_join(OBE2_Drug_Histories) %>% filter(Month>Started) %>% 
+      filter(ON==1) %>% select(patient, weight, Month) %>% distinct()  %>% rename("start"="Month")
+    ) %>% filter(start>stop) %>%  select(patient, weight) %>% distinct()  %>% summarise(n=sum(weight))
+
+ignore <- OBE2_Drug_Histories %>% filter(ON==1) %>% select(patient, weight, grp) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% filter(n>1) %>% select(-n) %>%
+  left_join(OBE2_Drug_Histories)  %>% filter(ON==1) %>% select(patient, weight, grp) %>% distinct() %>%
+  group_by(patient, weight) %>% filter(grp==min(grp)|grp==min(grp)+2) %>%
+  left_join(OBE2_Drug_Histories) 
+
+lapsed <- ignore  %>% select(patient, weight, grp) %>% distinct() %>%
+  filter(grp==min(grp)) %>% mutate(grp=grp+1) %>%
+  select(patient, weight, grp) %>% distinct() %>%
+  left_join(OBE2_Drug_Histories) %>% group_by(patient, weight) %>% count() %>% rename("lapsed"="n")
+  
+  
+ignore <- ignore %>% group_by(patient, weight) %>% 
+  mutate(grp=ifelse(grp==min(grp),1,2)) %>%
+  group_by(patient, weight, grp) %>% count() %>% ungroup() %>%
+  spread(key=grp, value=n) %>%
+  inner_join(lapsed)
+
+
+mean(ignore$`1`)
+mean(ignore$`2`)
+mean(ignore$`lapsed`)
+
+
+AllOBE2_episodes <- OBE2_Drug_Histories %>% filter(ON==1 & Month<49) %>% select(patient, weight, grp) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% rename("Nr_episodes"="n") %>%
+  left_join(
+    OBE2_Drug_Histories %>% filter(ON==1  & Month<49) %>% select(patient, weight, Month) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% rename("Total_months_ON"="n")
+  ) 
+
+
+fwrite(AllOBE2_episodes, "AllOBE2_episodes_v2.csv")
+
+
+
+
+OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<49) %>%
+  group_by(patient,weight) %>% count() %>% rename("before"="n") %>%
+  left_join(OBE2_Drug_Histories %>% ungroup() %>% filter(ON==1) %>% group_by(patient,weight) %>% count()) %>%
+  mutate(before=ifelse(before<6, "short",
+                       ifelse(before<12,"medium", "long"))) %>%
+  mutate(n=ifelse(n<6,"short",
+                  ifelse(n<12,"medium", "long"))) %>%
+  group_by(before, n) %>% summarise(pop=sum(weight))
+
+
+
+
+DANU_Measures <- fread("DANU Measures 1.1/DANU Measures.txt",  integer64 = "character", stringsAsFactors = F)
+
+DANU_Measures <- DANU_Measures %>% filter(test=="BMI") %>% 
+  inner_join(AllOBE2_episodes %>% ungroup() %>% select(patient), by=c("patid"="patient"))
+
+DANU_Measures <- DANU_Measures %>% select(patid, value) %>% distinct() %>% group_by(patid ) %>% filter(value==max(value)) %>% slice(1)
+
+DANU_Measures <- DANU_Measures %>% mutate(value=ifelse(value<25, "<25",
+                                           ifelse(value<27,"25-27",
+                                 ifelse(value<30,"27-30",
+                                        ifelse(value<35,"30-35",
+                                               ifelse(value<40,"35-40",">40"))))))
+
+DANU_Measures <- AllOBE2_episodes %>% inner_join(DANU_Measures, by=c("patient"="patid"))
+
+
+OBE2_Comorbidity_Inventories <- fread("DIA Analysis Results 1.1/OBE2 Comorbidity Inventories.txt")
+
+CKD <- unique(OBE2_Comorbidity_Inventories[grepl("N18",diagnosis), c("patid","weight")])
+POS <- unique(OBE2_Comorbidity_Inventories[grepl("E28",diagnosis), c("patid","weight")])
+PAD <- unique(OBE2_Comorbidity_Inventories[grepl("I70",diagnosis)|grepl("I73",diagnosis), c("patid","weight")])
+SLEEPAPNEA <- unique(OBE2_Comorbidity_Inventories[grepl("G47",diagnosis), c("patid","weight")])
+HF <- unique(OBE2_Comorbidity_Inventories[grepl("I5",diagnosis), c("patid","weight")])
+DISLIPIDEMIA <- unique(OBE2_Comorbidity_Inventories[grepl("E78",diagnosis), c("patid","weight")])
+HTN <- unique(OBE2_Comorbidity_Inventories[grepl("I10",diagnosis), c("patid","weight")])
+OA <- unique(OBE2_Comorbidity_Inventories[grepl("M15", diagnosis)|grepl("M16", diagnosis)|grepl("M17", diagnosis)|
+grepl("M18", diagnosis)| grepl("M19", diagnosis), c("patid","weight")])
+NASH <- unique(OBE2_Comorbidity_Inventories[grepl("K75",diagnosis), c("patid","weight")])
+PREDIABETES <- unique(OBE2_Comorbidity_Inventories[grepl("R73",diagnosis), c("patid","weight")])
+IHD <- unique(OBE2_Comorbidity_Inventories[grepl("I20", diagnosis)|grepl("I21", diagnosis)| grepl("I22", diagnosis)|
+grepl("I23", diagnosis)| grepl("I24", diagnosis)| grepl("I25", diagnosis), c("patid","weight")])
+
+
+CKD$CKD <- 1
+POS$POS <- 1
+PAD$PAD <- 1
+SLEEPAPNEA$SLEEPAPNEA <- 1
+HF$HF <- 1
+DISLIPIDEMIA$DISLIPIDEMIA <- 1
+HTN$HTN <- 1
+OA$OA <- 1
+NASH$NASH <- 1
+PREDIABETES$PREDIABETES <- 1
+IHD$IHD <- 1
+
+AllOBE2_episodes <- AllOBE2_episodes %>% rename("patid"="patient") %>%
+  left_join(CKD) %>%
+  left_join(POS) %>%
+  left_join(PAD) %>%
+  left_join(SLEEPAPNEA) %>%
+  left_join(HTN) %>%
+  left_join(OA) %>%
+  left_join(NASH) %>%
+  left_join(PREDIABETES) %>%
+  left_join(IHD) %>%
+  left_join(HF) %>%
+  left_join(DISLIPIDEMIA) 
+
+
+AllOBE2_episodes[is.na(AllOBE2_episodes)] <- 0
+
+AllOBE2_episodes <- AllOBE2_episodes %>% mutate(N_comorbs=CKD+POS+PAD+SLEEPAPNEA+HTN+OA+NASH+PREDIABETES+IHD+HF+DISLIPIDEMIA) %>%
+  select(-c(CKD,POS,PAD,SLEEPAPNEA,HTN,OA,NASH,PREDIABETES,IHD,HF,DISLIPIDEMIA))
+
+data.frame(AllOBE2_episodes %>% inner_join(DANU_Measures %>% select(patient, value) %>% rename("patid"="patient")) %>%
+  mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs)) %>%
+  group_by(value, N_comorbs) %>% summarise(mean=mean(Total_months_ON))) %>%
+  left_join(
+    data.frame(AllOBE2_episodes %>% inner_join(DANU_Measures %>% select(patient, value) %>% rename("patid"="patient")) %>%
+  mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs)) %>%
+  group_by(value, N_comorbs) %>% summarise(median=median(Total_months_ON))) 
+  ) %>%
+  left_join(
+    data.frame(AllOBE2_episodes %>% inner_join(DANU_Measures %>% select(patient, value) %>% rename("patid"="patient")) %>%
+  mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs)) %>%
+  group_by(value, N_comorbs) %>% count()) 
+  )
+
+# --------------
+# DANU DIA GLP1 persistency by BMI group and N comorbidities ------
+DANU_Ingredients <- fread("DIA Analysis Results 1.1/DANU Ingredients.txt", integer64 = "character", stringsAsFactors = F)
+DANU_Ingredients <- DANU_Ingredients %>%  separate(drug_id, c('class', 'molecule'))
+DANU_Ingredients <- DANU_Ingredients %>% select(molecule, drug_group)
+names(DANU_Ingredients)[1] <- "Drugs"
+DANU_Ingredients$Drugs <- as.numeric(DANU_Ingredients$Drugs)
+
+string_GLP1 <- paste0("\\b(",paste0(DANU_Ingredients$Drugs[DANU_Ingredients$drug_group == "GLP1 Injectable"], collapse = "|"),")\\b")
+
+DIA_Drug_Histories <- fread("DIA Analysis Results 1.1/DIA Drug Histories.txt")
+DIA_Drug_Histories <- gather(DIA_Drug_Histories, Month, Drugs, month1:month60, factor_key=TRUE)
+DIA_Drug_Histories <- DIA_Drug_Histories %>%  mutate(Month=parse_number(as.character(Month)))
+DIA_Drug_Histories <- DIA_Drug_Histories %>% mutate(ON=ifelse(grepl(string_GLP1, Drugs),1,0))
+
+DIA_Drug_Histories <- DIA_Drug_Histories <- DIA_Drug_Histories %>% arrange(patient, Month) %>% select(-c(disease, Drugs)) %>% group_by(patient) 
+
+data.frame(DIA_Drug_Histories %>% filter(ON==1) %>% ungroup() %>% group_by(Month) %>% summarise(tot=sum(weight)))
+
+DIA_Drug_Histories <- DIA_Drug_Histories %>% group_by(patient, weight) %>% 
+  mutate(grp = rle(ON)$lengths %>% {rep(seq(length(.)), .)})
+
+data.frame(DIA_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<=36) %>%
+  select(patient, weight) %>% distinct() %>%
+  left_join(DIA_Drug_Histories) %>% group_by(patient) %>%
+  filter(ON==1 & grp==min(grp)) %>% ungroup() %>%
+  group_by(patient, weight) %>% count() %>% ungroup() %>%
+  group_by(n) %>% summarise(pop=sum(weight)))
+
+
+to_track <- DIA_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month>=49) %>%
+  select(patient, weight, Month) %>% rename("Month2"="Month") %>%
+  inner_join(DIA_Drug_Histories %>% ungroup() %>% filter(ON==0 & Month>=49) %>%
+  select(patient, weight, Month) %>% rename("Month1"="Month") ) %>%
+  filter(Month2>Month1) %>% select(patient, weight) %>% distinct()
+
+sum(to_track$weight) # 387701
+
+DIA_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<49) %>%
+  select(patient) %>% distinct() %>% inner_join(to_track) %>%
+  summarise(n=sum(weight))
+
+Starts_m36 <- DIA_Drug_Histories %>% ungroup() %>% filter(ON==1 & Month<=36) %>%
+   group_by(patient) %>% filter(Month==min(Month)) %>%
+   select(patient, weight, Month) %>% rename("Started"="Month") %>% ungroup()
+
+sum(Starts_m36$weight)
+
+  
+  
+Starts_m36 %>% inner_join(DIA_Drug_Histories) %>%
+  filter(Month>Started) %>%
+  filter(ON==0) %>% select(patient, weight, Month) %>% distinct() %>% rename("stop"="Month") %>%
+  inner_join(
+    Starts_m36 %>% inner_join(DIA_Drug_Histories) %>% filter(Month>Started) %>% 
+      filter(ON==1) %>% select(patient, weight, Month) %>% distinct()  %>% rename("start"="Month")
+    ) %>% filter(start>stop) %>%  select(patient, weight) %>% distinct()  %>% summarise(n=sum(weight))
+
+ignore <- DIA_Drug_Histories %>% filter(ON==1) %>% select(patient, weight, grp) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% filter(n>1) %>% select(-n) %>%
+  left_join(DIA_Drug_Histories)  %>% filter(ON==1) %>% select(patient, weight, grp) %>% distinct() %>%
+  group_by(patient, weight) %>% filter(grp==min(grp)|grp==min(grp)+2) %>%
+  left_join(DIA_Drug_Histories) 
+
+lapsed <- ignore  %>% select(patient, weight, grp) %>% distinct() %>%
+  filter(grp==min(grp)) %>% mutate(grp=grp+1) %>%
+  select(patient, weight, grp) %>% distinct() %>%
+  left_join(DIA_Drug_Histories) %>% group_by(patient, weight) %>% count() %>% rename("lapsed"="n")
+  
+  
+ignore <- ignore %>% group_by(patient, weight) %>% 
+  mutate(grp=ifelse(grp==min(grp),1,2)) %>%
+  group_by(patient, weight, grp) %>% count() %>% ungroup() %>%
+  spread(key=grp, value=n) %>%
+  inner_join(lapsed)
+
+
+mean(ignore$`1`)
+mean(ignore$`2`)
+mean(ignore$`lapsed`)
+
+
+AllDIA_episodes <- DIA_Drug_Histories %>% filter(ON==1 & Month<49) %>% select(patient, weight, grp) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% rename("Nr_episodes"="n") %>%
+  left_join(
+    DIA_Drug_Histories %>% filter(ON==1  & Month<49) %>% select(patient, weight, Month) %>% distinct() %>% 
+  group_by(patient, weight) %>% count() %>% rename("Total_months_ON"="n")
+  ) 
+
+
+
+DANU_Measures <- fread("DANU Measures 1.1/DANU Measures.txt",  integer64 = "character", stringsAsFactors = F)
+
+DANU_Measures <- DANU_Measures %>% filter(test=="BMI") %>% 
+  inner_join(AllDIA_episodes %>% ungroup() %>% select(patient), by=c("patid"="patient"))
+
+DANU_Measures <- DANU_Measures %>% select(patid, value) %>% distinct() %>% group_by(patid ) %>% 
+  filter(value==max(value)) %>% slice(1)
+
+AllDIA_episodes <- AllDIA_episodes %>% inner_join(DANU_Measures, by=c("patient"="patid"))
+
+AllDIA_episodes <- AllDIA_episodes %>% rename("BMI"="value")
+
+DANU_Measures <- fread("DANU Measures 1.1/DANU Measures.txt",  integer64 = "character", stringsAsFactors = F)
+
+DANU_Measures <- DANU_Measures %>% filter(test=="HbA1c Level") %>% 
+  inner_join(AllDIA_episodes %>% ungroup() %>% select(patient), by=c("patid"="patient"))
+
+DANU_Measures <- DANU_Measures %>% select(patid, value) %>% distinct() %>% group_by(patid ) %>% 
+  filter(value==max(value)) %>% slice(1)
+
+AllDIA_episodes <- AllDIA_episodes %>% inner_join(DANU_Measures, by=c("patient"="patid"))
+
+AllDIA_episodes <- AllDIA_episodes %>% rename("HbA1c"="value")
+
+AllDIA_episodes <- AllDIA_episodes %>% ungroup()
+
+summary(lm(Total_months_ON ~ BMI + HbA1c, data=AllDIA_episodes))
+
+AllDIA_episodes %>% ggplot(aes(HbA1c, Total_months_ON)) + geom_smooth(method = "gam")
+
+# DANU_Measures <- DANU_Measures %>% mutate(value=ifelse(value<25, "<25",
+#                                            ifelse(value<27,"25-27",
+#                                  ifelse(value<30,"27-30",
+#                                         ifelse(value<35,"30-35",
+#                                                ifelse(value<40,"35-40",">40"))))))
+
+
+
+DIA_Comorbidity_Inventories <- fread("DIA Analysis Results 1.1/DIA Comorbidity Inventories.txt")
+
+CKD <- unique(DIA_Comorbidity_Inventories[grepl("N18",diagnosis), c("patid","weight")])
+POS <- unique(DIA_Comorbidity_Inventories[grepl("E28",diagnosis), c("patid","weight")])
+PAD <- unique(DIA_Comorbidity_Inventories[grepl("I70",diagnosis)|grepl("I73",diagnosis), c("patid","weight")])
+SLEEPAPNEA <- unique(DIA_Comorbidity_Inventories[grepl("G47",diagnosis), c("patid","weight")])
+HF <- unique(DIA_Comorbidity_Inventories[grepl("I5",diagnosis), c("patid","weight")])
+DISLIPIDEMIA <- unique(DIA_Comorbidity_Inventories[grepl("E78",diagnosis), c("patid","weight")])
+HTN <- unique(DIA_Comorbidity_Inventories[grepl("I10",diagnosis), c("patid","weight")])
+OA <- unique(DIA_Comorbidity_Inventories[grepl("M15", diagnosis)|grepl("M16", diagnosis)|grepl("M17", diagnosis)|
+grepl("M18", diagnosis)| grepl("M19", diagnosis), c("patid","weight")])
+NASH <- unique(DIA_Comorbidity_Inventories[grepl("K75",diagnosis), c("patid","weight")])
+PREDIABETES <- unique(DIA_Comorbidity_Inventories[grepl("R73",diagnosis), c("patid","weight")])
+IHD <- unique(DIA_Comorbidity_Inventories[grepl("I20", diagnosis)|grepl("I21", diagnosis)| grepl("I22", diagnosis)|
+grepl("I23", diagnosis)| grepl("I24", diagnosis)| grepl("I25", diagnosis), c("patid","weight")])
+
+
+CKD$CKD <- 1
+POS$POS <- 1
+PAD$PAD <- 1
+SLEEPAPNEA$SLEEPAPNEA <- 1
+HF$HF <- 1
+DISLIPIDEMIA$DISLIPIDEMIA <- 1
+HTN$HTN <- 1
+OA$OA <- 1
+NASH$NASH <- 1
+PREDIABETES$PREDIABETES <- 1
+IHD$IHD <- 1
+
+AllDIA_episodes <- AllDIA_episodes %>% rename("patid"="patient") %>%
+  left_join(CKD) %>%
+  left_join(POS) %>%
+  left_join(PAD) %>%
+  left_join(SLEEPAPNEA) %>%
+  left_join(HTN) %>%
+  left_join(OA) %>%
+  left_join(NASH) %>%
+  left_join(PREDIABETES) %>%
+  left_join(IHD) %>%
+  left_join(HF) %>%
+  left_join(DISLIPIDEMIA) 
+
+
+AllDIA_episodes[is.na(AllDIA_episodes)] <- 0
+
+AllDIA_episodes <- AllDIA_episodes %>% mutate(N_comorbs=CKD+POS+PAD+SLEEPAPNEA+HTN+OA+NASH+PREDIABETES+IHD+HF+DISLIPIDEMIA) %>%
+  select(-c(CKD,POS,PAD,SLEEPAPNEA,HTN,OA,NASH,PREDIABETES,IHD,HF,DISLIPIDEMIA))
+
+AllDIA_episodes <- AllDIA_episodes %>% mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs))
+
+
+mean(AllDIA_episodes$Total_months_ON)
+median(AllDIA_episodes$Total_months_ON)
+
+
+summary(lm(Total_months_ON ~ BMI, data=AllDIA_episodes))
+summary(lm(Total_months_ON ~ HbA1c, data=AllDIA_episodes))
+summary(lm(Total_months_ON ~ N_comorbs, data=AllDIA_episodes))
+
+summary(lm(Total_months_ON ~ BMI + HbA1c + N_comorbs, data=AllDIA_episodes))
+
+
+AllDIA_episodes %>% ungroup() %>%
+  ggplot(aes(N_comorbs, Total_months_ON)) + geom_smooth(method="loess")
+
+AllDIA_episodes %>% ungroup() %>%
+  ggplot(aes(BMI, Total_months_ON)) + geom_smooth(method="loess")
+
+AllDIA_episodes %>% ungroup() %>%
+  ggplot(aes(HbA1c, Total_months_ON)) + geom_smooth(method="loess")
+
+
+AllDIA_episodes %>% ungroup() %>%
+  ggplot(aes(N_comorbs, Total_months_ON)) + geom_smooth(method="lm") +
+  coord_cartesian(ylim=c(0,18)) +
+  theme_minimal() +
+  xlab("Number of Comorbidities") + ylab("Total Months ON GLP1")
+
+AllDIA_episodes %>% ungroup() %>%
+  ggplot(aes(BMI, Total_months_ON)) + geom_smooth(method="lm")  +
+  coord_cartesian(ylim=c(0,18), xlim=c(20,60)) +
+  theme_minimal() +
+  xlab("BMI") + ylab("Total Months ON GLP1")
+
+AllDIA_episodes %>% ungroup() %>%
+  ggplot(aes(HbA1c, Total_months_ON)) + geom_smooth(method="lm")  +
+  coord_cartesian(ylim=c(0,18), xlim=c(4,16)) +
+  theme_minimal() +
+  xlab("HbA1c") + ylab("Total Months ON GLP1")
+
+
+
+data.frame(AllDIA_episodes %>%
+  mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs)) %>%
+  group_by(value, N_comorbs) %>% summarise(mean=mean(Total_months_ON))) %>%
+  left_join(
+    data.frame(AllOBE2_episodes %>% inner_join(DANU_Measures %>% select(patient, value) %>% rename("patid"="patient")) %>%
+  mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs)) %>%
+  group_by(value, N_comorbs) %>% summarise(median=median(Total_months_ON))) 
+  ) %>%
+  left_join(
+    data.frame(AllOBE2_episodes %>% inner_join(DANU_Measures %>% select(patient, value) %>% rename("patid"="patient")) %>%
+  mutate(N_comorbs=ifelse(N_comorbs>=8,8,N_comorbs)) %>%
+  group_by(value, N_comorbs) %>% count()) 
+  )
+
+# --------------
