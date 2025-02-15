@@ -372,7 +372,7 @@ ggplot(top_PC7, aes(x = reorder(DIAG, abs(PC7)), y = PC7, fill = PC7 < 0)) +
   theme_minimal()
 
 # ----------
-# Comorbidities -----------
+# STOPS -----------
 
 
 OBE_Drug_Histories_RxExp <- fread("OBE Drug Histories_RxExp.txt")
@@ -442,3 +442,315 @@ afters <- Doses_OBE_Drgs %>% left_join(stops) %>%
 befores %>% inner_join(afters)  %>% select(patid) %>% distinct() # 122  come back to the same
 
 # ----------
+# Number of months ON GLP1 --------------------
+
+Doses_OBEonly_Drgs <- fread("Doses_OBEonly_Drgs.txt")
+
+Doses_OBEonly_Drgs %>% filter(grepl("GLP1", drug_group)) %>%
+  select(patid) %>% distinct() # 894
+
+
+Doses_OBEonly_Drgs %>% filter(grepl("GLP1", drug_group)) %>%
+  select(patid, brand_name) %>% distinct() %>%
+  group_by(patid) %>% count() %>% ungroup() %>% group_by(n) %>% count()
+
+
+Doses_OBEonly_Drgs %>% filter(grepl("GLP1", drug_group)) %>%
+  select(brand_name) %>% distinct() 
+
+range(Doses_OBEonly_Drgs$from_dt) # "2018-09-30" "2024-09-30"
+
+Doses_OBEonly_Drgs <- Doses_OBEonly_Drgs %>%
+  mutate(month_index = lubridate::interval(from_dt, as.Date("2024-09-30")) %/% months(1)) %>%
+  mutate(month_index=60-month_index)
+
+range(Doses_OBEonly_Drgs$month_index)
+
+Drugs_lookup <- Doses_OBEonly_Drgs %>% select(drug_id, generic_name, drug_group, drug_class) %>% distinct()
+
+# 58, 59, 61
+
+
+
+OBE_Only_Drug_Histories_RxExp <- fread("OBE_Only_Drug_Histories_RxExp.txt")
+
+OBE_Only_Drug_Histories_RxExp <- OBE_Only_Drug_Histories_RxExp %>%
+  gather(month, drugs, month1:month60)
+
+OBE_Only_Drug_Histories_RxExp$month <- parse_number(as.character(OBE_Only_Drug_Histories_RxExp$month))
+
+OBE_Only_Drug_Histories_RxExp <- OBE_Only_Drug_Histories_RxExp %>% select(-weight)
+
+data.frame(OBE_Only_Drug_Histories_RxExp %>% filter(drugs!="-") %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>%
+  group_by(patid) %>% count() %>% ungroup() %>% rename("months"="n") %>%
+    mutate(months=ifelse(months>=24,24,months)) %>%
+  group_by(months) %>% count() %>% ungroup() %>% mutate(tot=sum(n)) %>% 
+  mutate(perc=n/tot))
+
+
+
+data.frame(OBE_Only_Drug_Histories_RxExp %>% filter(drugs!="-") %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>%
+    mutate(year=ifelse(month<=12,1,
+                       ifelse(month<=24,2,
+                              ifelse(month<=36,3,
+                                     ifelse(month<=48,4,5))))) %>%
+  group_by(patid, year) %>% count() %>% ungroup() %>% rename("months"="n") %>%
+    mutate(months=ifelse(months>=24,24,months)) %>%
+  group_by(year, months) %>% count() %>% ungroup() %>% group_by(year) %>%
+    mutate(tot=sum(n)) %>% 
+  mutate(perc=n/tot)) %>%
+  select(year, months, perc) %>% distinct() %>%
+  spread(key=year, value=round(perc,0))
+
+
+OBE_Only_Drug_Histories_RxExp <- OBE_Only_Drug_Histories_RxExp %>% mutate(ON=ifelse(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs),1,0))
+
+
+OBE_Only_Drug_Histories_RxExp <- OBE_Only_Drug_Histories_RxExp %>%
+  arrange(patid, month) %>%
+   group_by(patid) %>% mutate(grp = rle(ON)$lengths %>% {rep(seq(length(.)), .)})
+
+
+data.frame(OBE_Only_Drug_Histories_RxExp %>% filter(drugs!="-") %>%
+  filter(ON==1) %>%
+  group_by(patid, grp) %>% count() %>% ungroup() %>% rename("months"="n") %>%
+    mutate(months=ifelse(months>=24,24,months)) %>%
+  group_by(months) %>% count() %>% ungroup() %>% mutate(tot=sum(n)) %>% 
+  mutate(perc=n/tot))
+
+
+data.frame(OBE_Only_Drug_Histories_RxExp %>% filter(drugs!="-") %>%
+  filter(ON==1) %>% filter(grepl("61", drugs)) %>%
+  group_by(patid, grp) %>% count() %>% ungroup() %>% rename("months"="n") %>%
+    mutate(months=ifelse(months>=24,24,months)) %>%
+  group_by(months) %>% count() %>% ungroup() %>% mutate(tot=sum(n)) %>% 
+  mutate(perc=n/tot))
+
+data.frame(OBE_Only_Drug_Histories_RxExp %>% filter(drugs!="-") %>%
+  filter(ON==1) %>% filter(grepl("58", drugs)) %>%
+  group_by(patid) %>% count() %>% ungroup() %>% rename("months"="n") %>%
+    mutate(months=ifelse(months>=24,24,months)) %>%
+  group_by(months) %>% count() %>% ungroup() %>% mutate(tot=sum(n)) %>% 
+  mutate(perc=n/tot))
+
+# -----------------
+# Stocks Before/After GLP1 --------------------
+
+OBE_Only_Box_Histories_All <- fread("OBE_Only_Box_Histories_All.txt")
+
+
+OBE_Only_Box_Histories_All <- OBE_Only_Box_Histories_All %>%
+  gather(month, stocks, month1:month60)
+
+OBE_Only_Box_Histories_All$month <- parse_number(as.character(OBE_Only_Box_Histories_All$month))
+
+OBE_Only_Box_Histories_All <- OBE_Only_Box_Histories_All %>% select(-weight)
+
+unique(OBE_Only_Box_Histories_All$stocks)
+
+OBE_Only_Box_Histories_All %>% arrange(patid, month) %>% group_by(patid) %>%
+  filter(stocks!="I" & lead(stocks)=="I") %>%
+  group_by(stocks) %>% count()
+
+OBE_Only_Box_Histories_All %>% arrange(patid, month) %>% group_by(patid) %>%
+  filter(stocks!="I" & lag(stocks)=="I") %>%
+  group_by(stocks) %>% count()
+
+
+
+OBE_Only_Box_Histories_All %>% arrange(patid, month) %>% group_by(patid) %>%
+  filter(stocks!="I" & lead(stocks)=="I") %>%
+    mutate(year=ifelse(month<=12,1,
+                       ifelse(month<=24,2,
+                              ifelse(month<=36,3,
+                                     ifelse(month<=48,4,5))))) %>%
+  group_by(year, stocks) %>% count() %>%
+   ungroup() %>% group_by(year) %>% mutate(tot=sum(n)) %>%
+  mutate(perc=n/tot) %>% select(-c(n,tot)) %>%
+  spread(key=year, value=perc)
+
+
+
+
+
+OBE_Only_Box_Histories_All %>% arrange(patid, month) %>% group_by(patid) %>%
+  filter(stocks!="I" & lag(stocks)=="I") %>%
+    mutate(year=ifelse(month<=12,1,
+                       ifelse(month<=24,2,
+                              ifelse(month<=36,3,
+                                     ifelse(month<=48,4,5))))) %>%
+  group_by(year, stocks) %>% count() %>%
+   ungroup() %>% group_by(year) %>% mutate(tot=sum(n)) %>%
+  mutate(perc=n/tot) %>% select(-c(n,tot)) %>%
+  spread(key=year, value=perc)
+
+
+
+
+# -----------------
+# Patient-months brand GLP1 --------------------
+
+OBE_Only_Drug_Histories_All <- fread("OBE_Only_Drug_Histories_All.txt")
+
+
+OBE_Only_Drug_Histories_All <- OBE_Only_Drug_Histories_All %>%
+  gather(month, drugs, month1:month60)
+
+OBE_Only_Drug_Histories_All$month <- parse_number(as.character(OBE_Only_Drug_Histories_All$month))
+
+OBE_Only_Drug_Histories_All <- OBE_Only_Drug_Histories_All %>% select(-weight)
+
+
+OBE_Only_Drug_Histories_All <- OBE_Only_Drug_Histories_All %>% filter(drugs!="-")
+
+
+OBE_Only_Drug_Histories_All  %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>%
+    mutate(year=ifelse(month<=12,1,
+                       ifelse(month<=24,2,
+                              ifelse(month<=36,3,
+                                     ifelse(month<=48,4,5))))) %>%
+  select(year, patid) %>% distinct() %>% group_by(year) %>% count()  # 803
+
+
+
+OBE_Only_Drug_Histories_All %>% 
+  mutate(Saxenda=ifelse(grepl("61", drugs), 1,0)) %>%
+  mutate(Wegovy=ifelse(grepl("58", drugs), 1,0)) %>%
+  mutate(Zepbound=ifelse(grepl("59", drugs), 1,0))  %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>% # 4617
+  mutate(Brand=ifelse(Zepbound==1,"Zepbound",
+                      ifelse(Saxenda==1,"Saxenda", "Wegovy"))) %>%
+  group_by(Brand) %>% count() %>% ungroup() %>% mutate(tot=sum(n)) %>%
+  mutate(perc=n/tot)
+
+
+
+
+OBE_Only_Drug_Histories_All %>% 
+   mutate(year=ifelse(month<=12,1,
+                       ifelse(month<=24,2,
+                              ifelse(month<=36,3,
+                                     ifelse(month<=48,4,5))))) %>%
+  mutate(Saxenda=ifelse(grepl("61", drugs), 1,0)) %>%
+  mutate(Wegovy=ifelse(grepl("58", drugs), 1,0)) %>%
+  mutate(Zepbound=ifelse(grepl("59", drugs), 1,0))  %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>% # 4617
+  mutate(Brand=ifelse(Zepbound==1,"Zepbound",
+                      ifelse(Saxenda==1,"Saxenda", "Wegovy"))) %>%
+  group_by(year, Brand) %>% count() %>% ungroup() %>%
+  group_by(year) %>%
+  mutate(tot=sum(n)) %>%
+  mutate(perc=n/tot) %>%
+  select(-c(n,tot)) %>%
+  spread(key=Brand, value=perc)
+
+
+
+
+OBE_Only_Drug_Histories_All %>% 
+  mutate(Saxenda=ifelse(grepl("61", drugs), 1,0)) %>%
+  mutate(Wegovy=ifelse(grepl("58", drugs), 1,0)) %>%
+  mutate(Zepbound=ifelse(grepl("59", drugs), 1,0))  %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>% # 4617
+  group_by(patid) %>% filter(month==min(month)) %>%
+  mutate(Brand=ifelse(Zepbound==1,"Zepbound",
+                      ifelse(Saxenda==1,"Saxenda", "Wegovy"))) %>%
+  group_by(Brand) %>% count() %>% ungroup() %>% mutate(tot=sum(n)) %>%
+  mutate(perc=n/tot)
+
+
+
+
+OBE_Only_Drug_Histories_All %>% 
+   mutate(year=ifelse(month<=12,1,
+                       ifelse(month<=24,2,
+                              ifelse(month<=36,3,
+                                     ifelse(month<=48,4,5))))) %>%
+  mutate(Saxenda=ifelse(grepl("61", drugs), 1,0)) %>%
+  mutate(Wegovy=ifelse(grepl("58", drugs), 1,0)) %>%
+  mutate(Zepbound=ifelse(grepl("59", drugs), 1,0))  %>%
+  filter(grepl("58", drugs)|grepl("59", drugs)|grepl("61", drugs)) %>% # 4617
+    group_by(patid) %>% filter(month==min(month)) %>%
+  mutate(Brand=ifelse(Zepbound==1,"Zepbound",
+                      ifelse(Saxenda==1,"Saxenda", "Wegovy"))) %>%
+  group_by(year, Brand) %>% count() %>% ungroup() %>%
+  group_by(year) %>%
+  mutate(tot=sum(n)) %>%
+  mutate(perc=n/tot) %>%
+  select(-c(n,tot)) %>%
+  spread(key=Brand, value=perc)
+
+
+
+# -----------------
+#  % GLP1 out of those with Dx --------------------
+
+Dxs_OBEpts <- fread("Dxs_OBEpts.txt")
+
+range(Dxs_OBEpts$DATE)
+
+Dxs_OBEpts$DATE <- as.Date(Dxs_OBEpts$DATE)
+Dxs_OBEpts <- Dxs_OBEpts %>% filter(grepl("E66", DIAG)) %>% select(PTID, DATE) %>% distinct()
+
+Dxs_OBEpts <- Dxs_OBEpts %>%
+  mutate(month_index = lubridate::interval(DATE, as.Date("2024-09-30")) %/% months(1)) %>%
+  mutate(month_index=60-month_index)
+
+
+Dxs_OBEpts <- Dxs_OBEpts %>% filter(month_index>=1) %>%
+  mutate(year=ifelse(month_index<=12,1,
+                       ifelse(month_index<=24,2,
+                              ifelse(month_index<=36,3,
+                                     ifelse(month_index<=48,4,5))))) 
+
+
+Dxs_OBEpts %>% select(PTID, year) %>% distinct() %>%
+  group_by(year) %>% count() %>% mutate(n=n/10000)
+
+
+
+
+Doses_OBE_Drgs <- fread("Doses_OBE_Drgs.txt")
+
+Doses_OBE_Drgs$from_dt <- as.Date(Doses_OBE_Drgs$from_dt)
+
+Doses_OBE_Drgs <- Doses_OBE_Drgs %>%
+  mutate(month_index = lubridate::interval(from_dt, as.Date("2024-09-30")) %/% months(1)) %>%
+  mutate(month_index=60-month_index)
+
+
+Doses_OBE_Drgs <- Doses_OBE_Drgs %>% filter(month_index>=1) %>%
+  mutate(year=ifelse(month_index<=12,1,
+                       ifelse(month_index<=24,2,
+                              ifelse(month_index<=36,3,
+                                     ifelse(month_index<=48,4,5))))) 
+
+
+
+Doses_OBE_Drgs <- Doses_OBE_Drgs %>% filter(paid_status =="PAID") %>% 
+  filter(grepl("GLP", drug_group)) %>%
+  select(patid, year) %>% distinct()
+
+
+
+Doses_OBE_Drgs %>% select(patid, year) %>% distinct() %>%
+  group_by(year) %>% count() %>% mutate(n=n/10000)
+
+
+
+Dxs_OBEpts %>% select(PTID, year) %>% distinct() %>%
+  group_by(year) %>% count() %>% mutate(n=n)
+
+
+
+Doses_OBE_Drgs %>% select(patid, year) %>% distinct() %>%
+  rename("PTID"="patid") %>%
+  inner_join(Dxs_OBEpts) %>%
+  group_by(year) %>% count() 
+
+
+
+# -----------------
